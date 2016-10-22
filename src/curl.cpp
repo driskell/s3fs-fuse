@@ -741,23 +741,61 @@ size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
   return copysize;
 }
 
+size_t S3fsCurl::ParseHeaderLine(size_t start, string& buffer, string& key, string& value)
+{
+  size_t key_end, value_start, value_end, trim_end;
+
+  // Find first non-empty line
+  if (string::npos == (value_end = buffer.find_first_of('\n', start))) {
+    value_end = buffer.find_first_of('\r', start);
+  }
+  if (value_end != string::npos) {
+    value_end++;
+  }
+
+  key_end = buffer.find_first_of(':', start);
+  if (key_end == string::npos || key_end >= value_end) {
+    // No key, just pull entry as a full value
+    key.clear();
+    key_end = value_start = start;
+  } else {
+    // Force to lower, only "x-amz"
+    key = buffer.substr(start, key_end - start);
+    if (strncasecmp("x-amz", key.c_str(), 5) == 0) {
+      transform(key.begin(), key.end(), key.begin(), static_cast<int (*)(int)>(std::tolower));
+    }
+
+    // Value starts after colon
+    value_start = key_end + 1;
+  }
+
+  // Trim value right hand side and check if empty
+  if (key_end >= (trim_end = buffer.find_last_not_of(SPACES, value_end - 1))) {
+    value.clear();
+    return value_end;
+  } else {
+    trim_end++;
+  }
+
+  // Trim left and check if empty
+  if (string::npos == (value_start = buffer.find_first_not_of(SPACES, value_start))) {
+    value.clear();
+    return value_end;
+  }
+
+  value = buffer.substr(value_start, trim_end - value_start);
+  return value_end;
+}
+
 size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr)
 {
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
-  string key;
-  stringstream ss(header);
+  string key, value;
 
-  if(getline(ss, key, ':')){
-    // Force to lower, only "x-amz"
-    string lkey = key;
-    transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
-    if(lkey.compare(0, 5, "x-amz") == 0){
-      key = lkey;
-    }
-    string value;
-    getline(ss, value);
-    (*headers)[key] = trim(value);
+  ParseHeaderLine(0, header, key, value);
+  if (!key.empty()) {
+    (*headers)[key] = value;
   }
   return blockSize * numBlocks;
 }

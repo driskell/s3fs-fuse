@@ -285,6 +285,7 @@ class S3fsCurl
 
     static bool InitMimeType(const char* MimeFile = NULL);
     static bool LocateBundle(void);
+    static size_t ParseHeaderLine(size_t start, std::string& buffer, std::string& key, std::string& value);
     static size_t HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
     static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
     static size_t ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
